@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IT 英文發音學習器</title>
+    <title>多益英文發音學習器 (AI 自動出題)</title>
     <style>
+        /* 深色模式外觀設定 */
         body {
             background-color: #2b2b2b;
             color: #ffffff;
@@ -20,28 +21,6 @@
             margin-bottom: 20px;
             color: #ffffff;
         }
-        /* 模式切換按鈕區 */
-        .mode-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .btn-mode {
-            background-color: #444;
-            color: white;
-            border: 1px solid #666;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s;
-        }
-        .btn-mode.active {
-            background-color: #28a745; /* 啟用時顯示綠色 */
-            border-color: #28a745;
-            font-weight: bold;
-        }
-        
         select {
             font-size: 18px;
             padding: 10px;
@@ -51,7 +30,7 @@
             color: #ffffff;
             border: 1px solid #666;
             cursor: pointer;
-            width: 320px;
+            width: 350px;
             text-align: center;
         }
         .translation {
@@ -81,6 +60,7 @@
         .btn-mic:hover { background-color: #a82e00; }
         .btn-mic:disabled { background-color: #666; cursor: not-allowed; }
         
+        /* 辨識結果的樣式 */
         #feedbackResult {
             font-size: 20px;
             font-weight: bold;
@@ -103,14 +83,11 @@
 </head>
 <body>
 
-    <h1>專業術語發音練習</h1>
+    <h1>多益發音實戰演練</h1>
 
-    <div class="mode-group">
-        <button id="btnWordMode" class="btn-mode active" onclick="switchMode('word')">📚 基礎單字</button>
-        <button id="btnSentenceMode" class="btn-mode" onclick="switchMode('sentence')">📅 每日 5 句</button>
-    </div>
-
-    <select id="wordSelect" onchange="updateTranslation()"></select>
+    <select id="wordSelect" onchange="updateTranslation()">
+        <option>準備連線中...</option>
+    </select>
 
     <div class="translation" id="translationDisplay"></div>
 
@@ -125,93 +102,86 @@
         💡 <b>操作提示：</b><br>
         切換單字/句子：按 <b>↑</b> <b>↓</b> 方向鍵<br>
         播放發音：按 <b>Enter</b> 或 <b>空白鍵</b><br>
-        麥克風測驗：按 <b>R 鍵</b>
+        麥克風測驗：按 <b>R 鍵</b><br><br>
+        <button onclick="resetApiKey()" style="font-size: 12px; padding: 5px 10px; background-color: #555;">更換 API Key</button>
     </div>
 
     <script>
-        // --- 字典庫 ---
-        const vocabList = {
-            "Server": "伺服器",
-            "Database": "資料庫",
-            "Hardware": "硬體",
-            "Network": "網路",
-            "Bandwidth": "頻寬",
-            "Latency": "延遲",
-            "Deployment": "部署",
-            "Infrastructure": "基礎架構",
-            "Configuration": "配置 / 設定"
-        };
-
-        // 簡短、實用的 IT 句子庫
-        const sentenceDB = [
-            {"en": "Restart the server.", "zh": "重新啟動伺服器。"},
-            {"en": "Check the network cable.", "zh": "檢查網路線。"},
-            {"en": "The system is down.", "zh": "系統停機了。"},
-            {"en": "Back up the data.", "zh": "備份資料。"},
-            {"en": "Clear the cache.", "zh": "清除快取。"},
-            {"en": "Install new hardware.", "zh": "安裝新硬體。"},
-            {"en": "Update the software.", "zh": "更新軟體。"},
-            {"en": "Log in as admin.", "zh": "以管理員身分登入。"},
-            {"en": "Ping the IP address.", "zh": "Ping 這個 IP 位址。"},
-            {"en": "The database is full.", "zh": "資料庫已滿。"},
-            {"en": "Fix the error code.", "zh": "修復錯誤代碼。"},
-            {"en": "Save the log file.", "zh": "儲存日誌檔案。"},
-            {"en": "The CPU is too hot.", "zh": "處理器溫度過高。"},
-            {"en": "Replace the hard drive.", "zh": "更換硬碟。"},
-            {"en": "Check the power supply.", "zh": "檢查電源供應器。"}
-        ];
-
-        let currentDict = vocabList; // 當前正在使用的字典 (預設為單字)
-
+        let currentDict = {};
         const selectElement = document.getElementById('wordSelect');
         const translationDisplay = document.getElementById('translationDisplay');
         const feedbackResult = document.getElementById('feedbackResult');
         const btnMic = document.getElementById('btnMic');
 
-        // --- 核心功能：切換模式 ---
-        function switchMode(mode) {
-            document.getElementById('btnWordMode').classList.remove('active');
-            document.getElementById('btnSentenceMode').classList.remove('active');
+        // --- 核心功能：呼叫 AI 自動產生多益題庫 ---
+        async function fetchFromAI() {
+            let apiKey = localStorage.getItem('myGeminiApiKey');
             
-            if (mode === 'word') {
-                document.getElementById('btnWordMode').classList.add('active');
-                currentDict = vocabList;
-            } else if (mode === 'sentence') {
-                document.getElementById('btnSentenceMode').classList.add('active');
-                currentDict = getDailySentences(); // 取得今天的 5 個句子
+            if (!apiKey) {
+                apiKey = prompt("請輸入你的 Gemini API Key 來啟用自動出題功能：\n(這只會儲存在你現在這台電腦的瀏覽器中)");
+                if (!apiKey) {
+                    selectElement.innerHTML = '<option>未輸入 API Key，無法載入</option>';
+                    translationDisplay.textContent = "請重新整理網頁並輸入 Key";
+                    return;
+                }
+                localStorage.setItem('myGeminiApiKey', apiKey); 
             }
-            
-            renderSelectOptions();
+
+            selectElement.innerHTML = '<option>🧠 AI 正在為您產生今日專屬題庫...</option>';
+            translationDisplay.textContent = "請稍候...";
+
+            // 更新為多益初階單字的指令
+            const aiPrompt = "從歷年多益(TOEIC)測驗的高頻必考單字中，隨機挑選5個適合初階程度（約多益 200 分水準）的基礎英文單字或實用短句。請直接回傳純JSON陣列格式，不要任何Markdown標記，格式範例：[{\"en\": \"Schedule\", \"zh\": \"行程表 / 安排\"}]";
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: aiPrompt }] }]
+                    })
+                });
+
+                if (!response.ok) throw new Error("API 請求失敗");
+
+                const data = await response.json();
+                let aiText = data.candidates[0].content.parts[0].text;
+                
+                // 清理標記並轉換成陣列
+                aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+                const aiData = JSON.parse(aiText);
+
+                currentDict = {};
+                aiData.forEach(item => {
+                    currentDict[item.en] = item.zh;
+                });
+
+                renderSelectOptions();
+
+            } catch (error) {
+                console.error(error);
+                selectElement.innerHTML = '<option>⚠️ 載入失敗，請檢查 Key 或網路</option>';
+                translationDisplay.textContent = "請點擊下方按鈕重新輸入 API Key";
+                localStorage.removeItem('myGeminiApiKey'); 
+            }
         }
 
-        // --- 核心功能：計算今天的 5 個句子 ---
-        function getDailySentences() {
-            // 利用今天的日期產生一個固定的數字，確保同一天選出來的句子是一樣的
-            const today = new Date();
-            const daySeed = today.getFullYear() * 1000 + today.getMonth() * 31 + today.getDate();
-            
-            // 根據日期的 seed 計算要從第幾個句子開始抓取
-            const startIndex = (daySeed * 5) % sentenceDB.length;
-            
-            let dailyDict = {};
-            for(let i = 0; i < 5; i++) {
-                let index = (startIndex + i) % sentenceDB.length;
-                let item = sentenceDB[index];
-                dailyDict[item.en] = item.zh;
-            }
-            return dailyDict;
+        // --- 重設 API Key 功能 ---
+        function resetApiKey() {
+            localStorage.removeItem('myGeminiApiKey');
+            location.reload(); // 重新整理網頁
         }
 
-        // --- 重新渲染下拉選單 ---
+        // --- 渲染下拉選單 ---
         function renderSelectOptions() {
-            selectElement.innerHTML = ''; // 先清空目前的選項
+            selectElement.innerHTML = ''; 
             for (let text in currentDict) {
                 let option = document.createElement('option');
                 option.value = text;
                 option.textContent = text;
                 selectElement.appendChild(option);
             }
-            updateTranslation(); // 更新翻譯與清空回饋
+            updateTranslation(); 
         }
 
         function updateTranslation() {
@@ -220,7 +190,7 @@
             feedbackResult.textContent = ""; 
         }
 
-        // --- 語音發音 ---
+        // --- 播放發音 ---
         function playPronunciation() {
             const textToSpeak = selectElement.value;
             if ('speechSynthesis' in window) {
@@ -252,8 +222,6 @@
             recognition.onresult = function(event) {
                 let spokenWord = event.results[0][0].transcript;
                 let targetWord = selectElement.value;
-
-                // 去除標點符號與轉小寫進行比對
                 let cleanSpoken = spokenWord.toLowerCase().replace(/[^a-z0-9]/g, '');
                 let cleanTarget = targetWord.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -270,55 +238,35 @@
                 btnMic.disabled = false;
                 btnMic.textContent = "🎙️ 換我唸唸看";
             };
-
-            recognition.onerror = function(event) {
-                feedbackResult.textContent = `⚠️ 麥克風發生錯誤：${event.error}`;
-                feedbackResult.className = "wrong";
-                btnMic.disabled = false;
-                btnMic.textContent = "🎙️ 換我唸唸看";
-            };
         } else {
             btnMic.style.display = 'none';
-            feedbackResult.textContent = "您的瀏覽器不支援語音辨識，請使用 Chrome 或 Edge。";
-            feedbackResult.className = "wrong";
         }
 
-        function startListening() {
-            if (recognition) {
-                recognition.start();
-            }
-        }
+        function startListening() { if (recognition) recognition.start(); }
 
         // --- 鍵盤操作 ---
         document.addEventListener('keydown', function(event) {
             const maxIndex = selectElement.options.length - 1;
             let currentIndex = selectElement.selectedIndex;
+            
+            // 避免在輸入 API Key 彈窗時觸發鍵盤事件
+            if (document.activeElement.tagName === 'INPUT') return;
 
             if (event.key === 'ArrowUp') {
                 event.preventDefault(); 
-                if (currentIndex > 0) {
-                    selectElement.selectedIndex = currentIndex - 1;
-                    updateTranslation(); 
-                }
+                if (currentIndex > 0) { selectElement.selectedIndex = currentIndex - 1; updateTranslation(); }
             } else if (event.key === 'ArrowDown') {
                 event.preventDefault(); 
-                if (currentIndex < maxIndex) {
-                    selectElement.selectedIndex = currentIndex + 1;
-                    updateTranslation(); 
-                }
+                if (currentIndex < maxIndex) { selectElement.selectedIndex = currentIndex + 1; updateTranslation(); }
             } else if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault(); 
-                playPronunciation(); 
+                event.preventDefault(); playPronunciation(); 
             } else if (event.key.toLowerCase() === 'r') {
-                event.preventDefault();
-                if (!btnMic.disabled) {
-                    startListening();
-                }
+                event.preventDefault(); if (!btnMic.disabled) startListening();
             }
         });
 
-        // 啟動時先初始化一次選項
-        renderSelectOptions();
+        // 啟動時執行
+        fetchFromAI();
     </script>
 
 </body>
