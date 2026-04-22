@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IT 英文發音學習器</title>
     <style>
-        /* 深色模式外觀設定 */
         body {
             background-color: #2b2b2b;
             color: #ffffff;
@@ -21,6 +20,28 @@
             margin-bottom: 20px;
             color: #ffffff;
         }
+        /* 模式切換按鈕區 */
+        .mode-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .btn-mode {
+            background-color: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-mode.active {
+            background-color: #28a745; /* 啟用時顯示綠色 */
+            border-color: #28a745;
+            font-weight: bold;
+        }
+        
         select {
             font-size: 18px;
             padding: 10px;
@@ -30,13 +51,15 @@
             color: #ffffff;
             border: 1px solid #666;
             cursor: pointer;
-            width: 250px;
+            width: 320px;
             text-align: center;
         }
         .translation {
             font-size: 24px;
             color: #a9b7c6;
             margin-bottom: 30px;
+            text-align: center;
+            min-height: 35px;
         }
         .button-group {
             display: flex;
@@ -52,32 +75,22 @@
             cursor: pointer;
             transition: background-color 0.3s;
         }
-        .btn-play {
-            background-color: #0078D7;
-        }
-        .btn-play:hover {
-            background-color: #005A9E;
-        }
-        .btn-mic {
-            background-color: #d83b01;
-        }
-        .btn-mic:hover {
-            background-color: #a82e00;
-        }
-        .btn-mic:disabled {
-            background-color: #666;
-            cursor: not-allowed;
-        }
-        /* 辨識結果的樣式 */
+        .btn-play { background-color: #0078D7; }
+        .btn-play:hover { background-color: #005A9E; }
+        .btn-mic { background-color: #d83b01; }
+        .btn-mic:hover { background-color: #a82e00; }
+        .btn-mic:disabled { background-color: #666; cursor: not-allowed; }
+        
         #feedbackResult {
             font-size: 20px;
             font-weight: bold;
-            height: 30px; /* 固定高度避免畫面跳動 */
+            height: 30px; 
             margin-top: 10px;
+            text-align: center;
         }
-        .correct { color: #4CAF50; } /* 答對顯示綠色 */
-        .wrong { color: #FF5252; }   /* 答錯顯示紅色 */
-        .listening { color: #FFC107; } /* 聆聽中顯示黃色 */
+        .correct { color: #4CAF50; } 
+        .wrong { color: #FF5252; }   
+        .listening { color: #FFC107; } 
 
         .hint {
             margin-top: 30px;
@@ -92,8 +105,12 @@
 
     <h1>專業術語發音練習</h1>
 
-    <select id="wordSelect" onchange="updateTranslation()">
-        </select>
+    <div class="mode-group">
+        <button id="btnWordMode" class="btn-mode active" onclick="switchMode('word')">📚 基礎單字</button>
+        <button id="btnSentenceMode" class="btn-mode" onclick="switchMode('sentence')">📅 每日 5 句</button>
+    </div>
+
+    <select id="wordSelect" onchange="updateTranslation()"></select>
 
     <div class="translation" id="translationDisplay"></div>
 
@@ -106,12 +123,13 @@
 
     <div class="hint">
         💡 <b>操作提示：</b><br>
-        切換單字：按 <b>↑</b> <b>↓</b> 方向鍵<br>
+        切換單字/句子：按 <b>↑</b> <b>↓</b> 方向鍵<br>
         播放發音：按 <b>Enter</b> 或 <b>空白鍵</b><br>
         麥克風測驗：按 <b>R 鍵</b>
     </div>
 
     <script>
+        // --- 字典庫 ---
         const vocabList = {
             "Server": "伺服器",
             "Database": "資料庫",
@@ -124,83 +142,85 @@
             "Configuration": "配置 / 設定"
         };
 
+        // 簡短、實用的 IT 句子庫
+        const sentenceDB = [
+            {"en": "Restart the server.", "zh": "重新啟動伺服器。"},
+            {"en": "Check the network cable.", "zh": "檢查網路線。"},
+            {"en": "The system is down.", "zh": "系統停機了。"},
+            {"en": "Back up the data.", "zh": "備份資料。"},
+            {"en": "Clear the cache.", "zh": "清除快取。"},
+            {"en": "Install new hardware.", "zh": "安裝新硬體。"},
+            {"en": "Update the software.", "zh": "更新軟體。"},
+            {"en": "Log in as admin.", "zh": "以管理員身分登入。"},
+            {"en": "Ping the IP address.", "zh": "Ping 這個 IP 位址。"},
+            {"en": "The database is full.", "zh": "資料庫已滿。"},
+            {"en": "Fix the error code.", "zh": "修復錯誤代碼。"},
+            {"en": "Save the log file.", "zh": "儲存日誌檔案。"},
+            {"en": "The CPU is too hot.", "zh": "處理器溫度過高。"},
+            {"en": "Replace the hard drive.", "zh": "更換硬碟。"},
+            {"en": "Check the power supply.", "zh": "檢查電源供應器。"}
+        ];
+
+        let currentDict = vocabList; // 當前正在使用的字典 (預設為單字)
+
         const selectElement = document.getElementById('wordSelect');
         const translationDisplay = document.getElementById('translationDisplay');
         const feedbackResult = document.getElementById('feedbackResult');
         const btnMic = document.getElementById('btnMic');
 
-        // 初始化語音辨識 (相容 Chrome 和 Edge)
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition;
-
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.lang = 'en-US'; // 設定辨識語言為英文
-            recognition.interimResults = false; // 只回傳最終辨識結果
-            recognition.maxAlternatives = 1;
-
-            // 當開始聽你說話時
-            recognition.onstart = function() {
-                btnMic.disabled = true;
-                btnMic.textContent = "👂 正在聽你說...";
-                feedbackResult.textContent = "請對著麥克風唸出單字...";
-                feedbackResult.className = "listening";
-            };
-
-            // 當辨識到聲音並轉換成文字時
-            recognition.onresult = function(event) {
-                // 取得你唸的字
-                let spokenWord = event.results[0][0].transcript;
-                // 取得目前的目標單字
-                let targetWord = selectElement.value;
-
-                // 為了準確比對，我們把兩個字都轉成小寫，並去掉多餘的標點符號或空白
-                let cleanSpoken = spokenWord.toLowerCase().replace(/[^a-z0-9]/g, '');
-                let cleanTarget = targetWord.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                if (cleanSpoken === cleanTarget) {
-                    feedbackResult.textContent = `✅ 太棒了！發音非常標準！`;
-                    feedbackResult.className = "correct";
-                } else {
-                    feedbackResult.textContent = `❌ 系統聽到的是： "${spokenWord}"，再試一次吧！`;
-                    feedbackResult.className = "wrong";
-                }
-            };
-
-            // 當語音辨識結束時
-            recognition.onend = function() {
-                btnMic.disabled = false;
-                btnMic.textContent = "🎙️ 換我唸唸看";
-            };
-
-            // 處理麥克風錯誤
-            recognition.onerror = function(event) {
-                feedbackResult.textContent = `⚠️ 麥克風發生錯誤：${event.error}`;
-                feedbackResult.className = "wrong";
-                btnMic.disabled = false;
-                btnMic.textContent = "🎙️ 換我唸唸看";
-            };
-        } else {
-            // 如果瀏覽器不支援
-            btnMic.style.display = 'none';
-            feedbackResult.textContent = "您的瀏覽器不支援語音辨識，請使用 Google Chrome 或 Edge。";
-            feedbackResult.className = "wrong";
+        // --- 核心功能：切換模式 ---
+        function switchMode(mode) {
+            document.getElementById('btnWordMode').classList.remove('active');
+            document.getElementById('btnSentenceMode').classList.remove('active');
+            
+            if (mode === 'word') {
+                document.getElementById('btnWordMode').classList.add('active');
+                currentDict = vocabList;
+            } else if (mode === 'sentence') {
+                document.getElementById('btnSentenceMode').classList.add('active');
+                currentDict = getDailySentences(); // 取得今天的 5 個句子
+            }
+            
+            renderSelectOptions();
         }
 
-        for (let word in vocabList) {
-            let option = document.createElement('option');
-            option.value = word;
-            option.textContent = word;
-            selectElement.appendChild(option);
+        // --- 核心功能：計算今天的 5 個句子 ---
+        function getDailySentences() {
+            // 利用今天的日期產生一個固定的數字，確保同一天選出來的句子是一樣的
+            const today = new Date();
+            const daySeed = today.getFullYear() * 1000 + today.getMonth() * 31 + today.getDate();
+            
+            // 根據日期的 seed 計算要從第幾個句子開始抓取
+            const startIndex = (daySeed * 5) % sentenceDB.length;
+            
+            let dailyDict = {};
+            for(let i = 0; i < 5; i++) {
+                let index = (startIndex + i) % sentenceDB.length;
+                let item = sentenceDB[index];
+                dailyDict[item.en] = item.zh;
+            }
+            return dailyDict;
+        }
+
+        // --- 重新渲染下拉選單 ---
+        function renderSelectOptions() {
+            selectElement.innerHTML = ''; // 先清空目前的選項
+            for (let text in currentDict) {
+                let option = document.createElement('option');
+                option.value = text;
+                option.textContent = text;
+                selectElement.appendChild(option);
+            }
+            updateTranslation(); // 更新翻譯與清空回饋
         }
 
         function updateTranslation() {
-            const selectedWord = selectElement.value;
-            translationDisplay.textContent = vocabList[selectedWord];
-            // 切換單字時清空之前的評分結果
+            const selectedText = selectElement.value;
+            translationDisplay.textContent = currentDict[selectedText];
             feedbackResult.textContent = ""; 
         }
 
+        // --- 語音發音 ---
         function playPronunciation() {
             const textToSpeak = selectElement.value;
             if ('speechSynthesis' in window) {
@@ -212,13 +232,64 @@
             }
         }
 
+        // --- 語音辨識 ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US'; 
+            recognition.interimResults = false; 
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                btnMic.disabled = true;
+                btnMic.textContent = "👂 正在聽你說...";
+                feedbackResult.textContent = "請對著麥克風唸...";
+                feedbackResult.className = "listening";
+            };
+
+            recognition.onresult = function(event) {
+                let spokenWord = event.results[0][0].transcript;
+                let targetWord = selectElement.value;
+
+                // 去除標點符號與轉小寫進行比對
+                let cleanSpoken = spokenWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+                let cleanTarget = targetWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                if (cleanSpoken === cleanTarget) {
+                    feedbackResult.textContent = `✅ 太棒了！發音非常標準！`;
+                    feedbackResult.className = "correct";
+                } else {
+                    feedbackResult.textContent = `❌ 系統聽到： "${spokenWord}"，再試一次吧！`;
+                    feedbackResult.className = "wrong";
+                }
+            };
+
+            recognition.onend = function() {
+                btnMic.disabled = false;
+                btnMic.textContent = "🎙️ 換我唸唸看";
+            };
+
+            recognition.onerror = function(event) {
+                feedbackResult.textContent = `⚠️ 麥克風發生錯誤：${event.error}`;
+                feedbackResult.className = "wrong";
+                btnMic.disabled = false;
+                btnMic.textContent = "🎙️ 換我唸唸看";
+            };
+        } else {
+            btnMic.style.display = 'none';
+            feedbackResult.textContent = "您的瀏覽器不支援語音辨識，請使用 Chrome 或 Edge。";
+            feedbackResult.className = "wrong";
+        }
+
         function startListening() {
             if (recognition) {
                 recognition.start();
             }
         }
 
-        // 鍵盤操作監聽
+        // --- 鍵盤操作 ---
         document.addEventListener('keydown', function(event) {
             const maxIndex = selectElement.options.length - 1;
             let currentIndex = selectElement.selectedIndex;
@@ -240,14 +311,14 @@
                 playPronunciation(); 
             } else if (event.key.toLowerCase() === 'r') {
                 event.preventDefault();
-                // 如果麥克風按鈕不是被禁用的狀態，才觸發錄音
                 if (!btnMic.disabled) {
                     startListening();
                 }
             }
         });
 
-        updateTranslation();
+        // 啟動時先初始化一次選項
+        renderSelectOptions();
     </script>
 
 </body>
